@@ -3,12 +3,11 @@ title: "EV Power - Lab 4 Project Report"
 format: typst
 ---
 
-# Example Solution 1
-
 ## **Part 0: libraries**
 
 ```{r}
 library(tidyverse)
+library(readr)
 library(stringr)
 library(dplyr)
 library(ggplot2)
@@ -23,38 +22,82 @@ Chosen Question: Do states with more EV registrations tend to have cheaper elect
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
-# cleaning total energy use 2023
-total_energy23 <- read.csv('data/total-use-2023.csv', skip = 2)
-total_energy23
+# fixing messy data from csv: av-energy
 
-clean_headers <- function(headers) {
-    headers |>
-    str_trim() |> # remove leading/trailing whitespace
-    str_to_lower() |> # standardize to lowercase
-    str_replace_all("[^a-z0-9_\\s]", "") |> # remove special characters
-    str_replace_all("[-_]", " ") |> # normalize separators
-    str_replace_all("\\s+", "_") # convert to snake_case
-}
+# read in the messy CSV (skip extra rows if needed)
+energy_cost_raw <- read_csv("data/av-energy-price-2021-2023.csv", skip = 2)
+energy_cost_raw
 
-# example:
-names(total_energy23) <- clean_headers(names(total_energy23))
-total_energy23
+# Split the one column into four depending on where there is a comma
+energy_cost_raw <- separate(
+    energy_cost_raw,
+    col = 1,
+    into = c("State", "2021", "2022", "2023"),
+    sep = ","
+)
 
-# state names are not lowercase and spelled out, so must first change state names so they can# adding DC to list of state names
+# preview data
+head(energy_cost_raw)
+
+# clean the table using regex
+energy_cost <- energy_cost_raw |>
+    mutate(across(
+        c(`2021`, `2022`, `2023`),
+        ~ as.numeric(str_extract(.x, "\\d+\\.?\\d*"))
+    ))
+head(energy_cost)
+```
+
+```{r}
+# fixing messy data from csv: messy-ev-registrations
+ev_reg <- read_csv("data/ev-registrations-by-state-2023.csv", skip = 2)
+ev_reg
+
+# cleaning ev_reg
+names(ev_reg) <- names(ev_reg) |>
+    str_trim() |>
+    str_to_lower() |>
+    str_replace_all("[-_]", " ") |>
+    str_replace_all("\\s+", "_") |>
+    str_remove_all("\\(.*\\)") # remove units like (2023)
+
+head(ev_reg)
+
+ev_reg <- ev_reg |>
+    mutate(count_evs = str_extract(count_evs, "\\d+") %>% as.numeric())
+head(ev_reg)
+```
+
+```{r, error=TRUE, warning=FALSE}
+# choosing the year 2023 because only have one year of data for EV registrations
+
+# state names are not equal, so must first change state names so they can be joined
+# adding DC to list of state names
 state_fulls <- c(datasets::state.name, "District of Columbia")
 state_fulls
 state_abbs <- c(datasets::state.abb, "DC")
 state_abbs
 
-# changing state abbreviations to full names
-state_lookup <- tibble(state_fulls, state_abbs)
-state_lookup
+state_lookup <- tibble(state_fulls, state_abbs) # maybe
+state_lookup # maybe
 
-total_energy23 |>
-    left_join(state_lookup, by = join_by('State' == 'state_abbs'))
-total_energy23
+# matching state abbreviations to full names and replacing full names with abbrvs
+matching <- match(energy_cost$State, state_abbs)
+matching
+energy_cost$State <- ifelse(is.na(matching), ev_reg$State, state_fulls[matching])
 
-head(total_energy23)
+head(energy_cost)
+
+# subsetting only 2023 year of energy costs
+energy_cost_2023 <- energy_cost[,c(1,4)]
+
+# renaming columns
+colnames(energy_cost_2023) <- c("state", "cost")
+energy_cost_2023
+colnames(ev_reg) <- (c("state", "count_of_regs"))
+
+ev_reg
+energy_cost_2023
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
@@ -80,8 +123,9 @@ us_average_cost
 
 ev_reg_to_energy_cost <- ev_reg_to_energy_cost |>
     mutate(energy_cost_vs_average = (cost / us_average_cost))
+```
 
-
+```{r}
 # mapping ratio of energy cost
 
 # create map of US states
@@ -92,7 +136,9 @@ ev_reg_to_energy_cost$state <- tolower(ev_reg_to_energy_cost$state)
 # Join map data
 ratio_map <- states_map |>
     left_join(ev_reg_to_energy_cost, by = c("ID" = "state"))
+```
 
+```{r}
 # map of energy cost in states
 ggplot(ratio_map) +
     geom_sf(aes(fill = energy_cost_vs_average), color = "white") +
@@ -109,8 +155,9 @@ ggplot(ratio_map) +
         axis.text = element_blank(),
         axis.ticks = element_blank()
 )
+```
 
-
+```{r}
 # map of number of EVs
 ggplot(ratio_map) +
     geom_sf(aes(fill = count_of_regs), color = "white") +
