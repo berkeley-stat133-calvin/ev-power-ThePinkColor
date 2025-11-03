@@ -8,27 +8,122 @@ format: typst
 ## **Part 0: libraries**
 
 ```{r}
-
+library(tidyverse)
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(maps)
 ```
 
 ## **Part 1:** **Defining Research Question**
 
-Chosen Question:
+Chosen Question: Do states with more EV registrations tend to have cheaper electricity?
 
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
+# cleaning total energy use 2023
+total_energy23 <- read.csv('data/total-use-2023.csv', skip = 2)
+total_energy23
 
+clean_headers <- function(headers) {
+    headers |>
+    str_trim() |> # remove leading/trailing whitespace
+    str_to_lower() |> # standardize to lowercase
+    str_replace_all("[^a-z0-9_\\s]", "") |> # remove special characters
+    str_replace_all("[-_]", " ") |> # normalize separators
+    str_replace_all("\\s+", "_") # convert to snake_case
+}
+
+# example:
+names(total_energy23) <- clean_headers(names(total_energy23))
+total_energy23
+
+# state names are not lowercase and spelled out, so must first change state names so they can# adding DC to list of state names
+state_fulls <- c(datasets::state.name, "District of Columbia")
+state_fulls
+state_abbs <- c(datasets::state.abb, "DC")
+state_abbs
+
+# changing state abbreviations to full names
+state_lookup <- tibble(state_fulls, state_abbs)
+state_lookup
+
+total_energy23 |>
+    left_join(state_lookup, by = join_by('State' == 'state_abbs'))
+total_energy23
+
+head(total_energy23)
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
 ```{r}
+# Now that the tables have the same state names, join them:
 
+ev_reg_to_energy_cost <- full_join(ev_reg, energy_cost_2023, by = "state")
+
+#remove total column at bottom
+ev_reg_to_energy_cost <- ev_reg_to_energy_cost[1:51,]
+print(ev_reg_to_energy_cost, n=52)
 ```
 
 ## **Part 4: Mapping Visualization**
 
 ```{r}
+length(energy_cost_2023$cost)
+energy_cost_2023$cost[52]
 
+us_average_cost <- mean(ev_reg_to_energy_cost$cost)
+us_average_cost
+
+ev_reg_to_energy_cost <- ev_reg_to_energy_cost |>
+    mutate(energy_cost_vs_average = (cost / us_average_cost))
+
+
+# mapping ratio of energy cost
+
+# create map of US states
+states_map <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+# Match state names: map names are lowercase
+ev_reg_to_energy_cost$state <- tolower(ev_reg_to_energy_cost$state)
+# Join map data
+ratio_map <- states_map |>
+    left_join(ev_reg_to_energy_cost, by = c("ID" = "state"))
+
+# map of energy cost in states
+ggplot(ratio_map) +
+    geom_sf(aes(fill = energy_cost_vs_average), color = "white") +
+    scale_fill_gradient2(
+        low = "green", mid = "white", high = "red",
+        midpoint = 1
+    ) +
+    labs(
+        title = "Electricity Price by State Compared to Average",
+        subtitle = "Red = above US average, Green = below US average"
+    ) +
+    theme_minimal() +
+    theme(
+        axis.text = element_blank(),
+        axis.ticks = element_blank()
+)
+
+
+# map of number of EVs
+ggplot(ratio_map) +
+    geom_sf(aes(fill = count_of_regs), color = "white") +
+    scale_fill_gradient(
+        low = "blue", high = "red"
+    ) +
+    labs(
+        title = "EV Registrations",
+        subtitle = "Red = above US average, Blue = below US average"
+    ) +
+    theme_minimal() +
+    theme(
+        axis.text = element_blank(),
+        axis.ticks = element_blank()
+)
 ```
