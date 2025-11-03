@@ -174,3 +174,9 @@ ggplot(ratio_map) +
         axis.ticks = element_blank()
 )
 ```
+
+## **Part 5: Analysis**
+
+These graphs suggest a weak relationship between EV registrations and the cost of energy compared to the national average. This effect appears negligible since electricity is still cheaper than gasoline. Perhaps a more meaningful comparison would be EV registrations per state compared to that state’s cost of gasoline.
+
+However, there does seem to be a geographic relationship to EV registrations. The highest levels of EV registrations is at the states closest to the ocean, as well as states closer to the equator. California, a leader in renewable energy, stands out as leading the EV industry as well.
